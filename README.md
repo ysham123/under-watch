@@ -23,15 +23,15 @@ The question is Goodhart's law in a setting small enough to inspect completely: 
 
 ## Key findings
 
-All numbers are from one training run per setting; see [Limits](#limits).
+The headline pressure result is replicated across **5 independent seeds**, each retraining the team, saboteur and monitor from scratch ([Replication](#replication-across-seeds)). The rest of the sweep and the arms race are one training run per setting; see [Limits](#limits).
 
 | Finding | Number | What it means |
 |---|---|---|
 | A saboteur trained only to hurt the team is easy to catch | damage **+0.41** final distance (team 1.34 → about 1.75); held-out AUROC **0.999** (MLP), **0.998** (RGCN) | Unpressured sabotage is blunt: the saboteur leaves, ending outside the start area in 73% of episodes (honest agents: 35%). |
-| Under pressure, the saboteur beats the frozen monitor it trains against | AUROC falls to **0.60** (MLP) and **0.59** (RGCN) at λ = 20; **0.48** for the RGCN at λ = 40 | Below 0.5 the saboteur looks *less* suspicious than honest agents. |
-| Hiding costs harm | damage falls from **0.33** to **0.08** (MLP in the loop) and **0.14** (RGCN in the loop) at λ = 20 | Stealth and sabotage trade off; past λ of 10 to 20 the curves flatten. |
-| The evasive saboteur is not truly indistinguishable | a monitor retrained on it scores **≥ 0.99** at every λ, for both designs | Evasion exploited one frozen monitor's blind spots rather than becoming honest. |
-| The saboteur changes *how* it does harm | ends as close to landmarks as honest agents (**0.58** vs 0.59) but moves faster (**0.82** vs 0.61) and collides more (**0.94** vs 0.68) | The frozen monitors had learned "far from landmarks means saboteur"; contact and speed slipped past them. |
+| Under pressure, the saboteur beats the frozen monitor it trains against | at λ = 20 the frozen MLP monitor falls from **0.999** to **0.49 to 0.69** across 5 seeds (mean 0.58); in the sweep run, **0.60** (MLP) and **0.59** (RGCN), and **0.48** for the RGCN at λ = 40 | Below 0.5 the saboteur looks *less* suspicious than honest agents. |
+| Hiding costs harm | damage falls **58% to 77%** across 5 seeds; in the sweep run, from **0.33** to **0.08** (MLP in the loop) and **0.14** (RGCN in the loop) at λ = 20 | Stealth and sabotage trade off; past λ of 10 to 20 the curves flatten. |
+| The evasive saboteur is not truly indistinguishable | a monitor retrained on it scores **0.97 to 0.99** across 5 seeds, and **≥ 0.99** at every λ of the sweep, for both designs | Evasion exploited one frozen monitor's blind spots rather than becoming honest. |
+| The saboteur changes *how* it does harm | moves **38% to 43%** faster and collides **34% to 58%** more than honest agents, in every one of the 5 seeds | The evader slips past the frozen monitor while still behaving measurably differently, which is why a retrained monitor separates it again. Whether it also ends near landmarks varies by seed. |
 | Evasion transferred one way only | MLP-evaders also fooled the frozen RGCN (**0.60**); RGCN-evaders were still flagged by the frozen MLP (**0.73**) and kept more damage | In this run the graph monitor was the easier one to beat. |
 | The defender keeps up in the arms race, by a shrinking margin | after retraining: **0.98, 0.94, 0.93** (MLP) and **0.99, 0.95, 0.87** (RGCN) over three rounds; damage **0.08 → 0.05** and **0.14 → 0.07** | Each round of hiding leaves less harm, and each retraining recovers a little less. |
 
@@ -51,6 +51,21 @@ All numbers are from one training run per setting; see [Limits](#limits).
 | Metrics | AUROC (chance 0.5), caught rate (top-scored agent is the saboteur; chance 1/3), damage |
 
 ## Results
+
+### Replication across seeds
+
+`scripts/replicate_seeds.py` retrains everything from scratch for each seed (honest team, unpressured saboteur, MLP monitor, then a saboteur trained against that frozen monitor at λ = 20) and scores all monitors on held-out episodes.
+
+| Seed | Team final distance | Damage: unpressured → evasive | AUROC, unpressured | AUROC, frozen monitor on evader | AUROC, retrained monitor on evader | Evader speed / honest | Evader collisions / honest |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.78 | 0.88 → 0.27 | 0.998 | 0.489 | 0.983 | +40% | +34% |
+| 2 | 1.41 | 0.27 → 0.06 | 0.999 | 0.666 | 0.990 | +39% | +51% |
+| 3 | 1.26 | 0.57 → 0.14 | 0.999 | 0.690 | 0.972 | +38% | +49% |
+| 4 | 1.25 | 0.72 → 0.28 | 1.000 | 0.541 | 0.993 | +41% | +52% |
+| 5 | 1.29 | 0.75 → 0.31 | 1.000 | 0.522 | 0.994 | +43% | +58% |
+| **Mean [95% CI]** | | **0.64 → 0.21** | **0.999** | **0.58 [0.51, 0.65]** | **0.986 [0.978, 0.993]** | | |
+
+Intervals are bootstrap over seeds. The team's own quality varies a lot between seeds (final distance 0.78 to 1.41), and so does the unpressured damage, but the pattern does not: the frozen monitor drops to near chance, a retrained monitor recovers, and the evader is faster and bumps into teammates more in every seed.
 
 ### Pressure sweep
 
@@ -132,6 +147,7 @@ python scripts/part9_behaviour.py           # behaviour comparison      <1 min
 python scripts/part10_arms_race.py mlp      # arms race                 ~2 min
 python scripts/part10_arms_race.py rgcn     #                           ~7 min
 python scripts/part11_make_figures.py       # figures from results/
+python scripts/replicate_seeds.py 1 2 3 4 5 # 5-seed replication       ~3 min per seed
 pytest -q                                   # 7 tests, ~30 s
 ```
 
@@ -149,7 +165,7 @@ Times are on a 4-core CPU. Every key is fixed, so a rerun reproduces the checkpo
 
 ## Limits
 
-* **One run per setting.** The λ = 0 row of the sweep is the same setting as the unpressured saboteur, yet its damage came out 0.33 instead of 0.41: floating-point differences amplified by training. Differences of that size are noise. Multi-seed runs with bootstrap intervals are the next step, and the transfer asymmetry in particular needs them before it can be trusted.
+* **Only the headline result is replicated.** The λ = 20 MLP result holds across 5 seeds. The rest of the sweep, the RGCN-in-the-loop runs, the transfer asymmetry and the arms race are one run per setting. The λ = 0 row of the sweep is the same setting as the unpressured saboteur, yet its damage came out 0.33 instead of 0.41: floating-point differences amplified by training, so differences of that size are noise.
 * **The honest team is frozen.** It cannot adapt to the saboteur.
 * **One task and one saboteur objective** (the team's total landmark gap).
 * **Monitors see full trajectories after the episode**, not partial or online views.
